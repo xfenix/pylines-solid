@@ -11,4 +11,4 @@ class Diagnostic:
     message_text: str
 
 
-RULE_CODES: typing.Final = frozenset({"PLS001", "PLS002", "PLS003", "PLS004"})
+RULE_CODES: typing.Final = frozenset({"PLS001", "PLS002", "PLS003", "PLS004", "PLS005", "PLS006", "PLS007"})

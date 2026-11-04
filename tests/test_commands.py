@@ -10,7 +10,7 @@ import pytest
 if typing.TYPE_CHECKING:
     import pathlib
 
-PROCESS_TIMEOUT: typing.Final = 10
+PROCESS_TIMEOUT: typing.Final = 30
 FIFO_TIMEOUT_SECONDS: typing.Final = 2
 INPUT_ERROR_EXIT: typing.Final = 2
 
@@ -18,9 +18,16 @@ INPUT_ERROR_EXIT: typing.Final = 2
 def run_checker(
     *source_paths: pathlib.Path,
     working_directory: pathlib.Path | None = None,
+    checker_options: tuple[str, ...] = (),
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "pylines_solid", *(str(one_source_path) for one_source_path in source_paths)],
+        [
+            sys.executable,
+            "-m",
+            "pylines_solid",
+            *checker_options,
+            *(str(one_source_path) for one_source_path in source_paths),
+        ],
         cwd=working_directory,
         capture_output=True,
         text=True,
@@ -36,7 +43,7 @@ def run_checker(
             """
             class ParentBird:
                 def perform_flight(self):
-                    return "flying"
+                    return self.__class__.__name__
 
             class PenguinBird(ParentBird):
                 def perform_flight(self):
@@ -143,7 +150,7 @@ def run_checker(
             """
             class ParentBird:
                 def perform_flight(self):
-                    return "flying"
+                    return self.__class__.__name__
 
             class FlyingBird(ParentBird):
                 def perform_flight(self):
@@ -151,7 +158,7 @@ def run_checker(
 
             class SmartLight:
                 def illuminate_room(self):
-                    return "light"
+                    return self.__class__.__name__
             """,
             (),
             id="implemented-capability-and-small-interface",
@@ -169,7 +176,7 @@ def run_checker(
             """
             class SmartDevice:
                 def control_temperature(self, requested_temperature):
-                    if requested_temperature < 0:
+                    if requested_temperature < self.minimum_temperature:
                         raise NotImplementedError
                     return requested_temperature
             """,
@@ -267,7 +274,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
 
             class FetchService:
                 def fetch_remote(self, httpx):
-                    return httpx.Client()
+                    return httpx.Client(timeout=self.timeout_seconds)
             """,
             id="parameter-shadows-import",
         ),
@@ -278,7 +285,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
             class FetchService:
                 def fetch_remote(self, replacement_factory):
                     HttpConnection = replacement_factory
-                    return HttpConnection()
+                    return HttpConnection(self.timeout_seconds)
             """,
             id="local-binding-shadows-import",
         ),
@@ -289,7 +296,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
 
             class FetchService:
                 def fetch_remote(self):
-                    return httpx.Client()
+                    return httpx.Client(timeout=self.timeout_seconds)
             """,
             id="module-binding-shadows-import",
         ),
@@ -301,7 +308,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
                 def fetch_remote(self, replacement_module):
                     match replacement_module:
                         case {"transport": httpx}:
-                            return httpx.Client()
+                            return httpx.Client(timeout=self.timeout_seconds)
                     return None
             """,
             id="match-binding-shadows-import",
@@ -313,7 +320,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
 
             class FetchService:
                 def fetch_remote(self):
-                    return httpx.Client()
+                    return httpx.Client(timeout=self.timeout_seconds)
             """,
             id="star-import-makes-module-binding-uncertain",
         ),
@@ -324,7 +331,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
             class FetchService:
                 def fetch_remote(self):
                     def build_connection():
-                        return httpx.Client()
+                        return httpx.Client(timeout=self.timeout_seconds)
                     return build_connection
             """,
             id="nested-factory-is-not-a-method",

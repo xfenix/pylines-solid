@@ -5,6 +5,7 @@ import typing
 
 from pylines_solid.diagnostics import Diagnostic
 from pylines_solid.dispatch import check_dispatch
+from pylines_solid.receivers import check_receiver
 
 type MethodDefinition = ast.FunctionDef | ast.AsyncFunctionDef
 type ScopeBindings = collections.abc.Mapping[str, str | None]
@@ -251,6 +252,66 @@ def check_method(
             )
 
 
+def resolve_builtin(expression_node: ast.AST, scope_bindings: ScopeBindings) -> str | None:
+    if isinstance(expression_node, ast.Name) and expression_node.id not in scope_bindings:
+        return f"builtins.{expression_node.id}"
+    return resolve_reference(expression_node, scope_bindings)
+
+
+def check_method_responsibility(
+    *,
+    class_definition: ast.ClassDef,
+    method_definition: MethodDefinition,
+    module_classes: collections.abc.Mapping[str, ast.ClassDef],
+    global_bindings: ScopeBindings,
+) -> collections.abc.Iterator[Diagnostic]:
+    decorator_bindings: typing.Final = collect_bindings(
+        class_definition.body[: class_definition.body.index(method_definition)], global_bindings
+    )
+    decorator_names: typing.Final = {
+        resolve_builtin(one_decorator_node, decorator_bindings)
+        for one_decorator_node in method_definition.decorator_list
+    }
+    if "builtins.staticmethod" in decorator_names:
+        yield Diagnostic(
+            line_number=method_definition.lineno,
+            column_number=method_definition.col_offset + 1,
+            rule_code="PLS005",
+            message_text="[SRP] Team rule: static methods are forbidden; move the function out of the class.",
+        )
+        return
+    if (
+        decorator_names - {"builtins.classmethod", "builtins.property"}
+        or check_protocol(class_definition, global_bindings)
+        or check_abstract(method_definition, class_definition, global_bindings)
+        or find_inherited_method(class_definition, method_definition.name, module_classes) is not None
+    ):
+        return
+    method_bindings: typing.Final = collect_bindings(
+        method_definition.body, global_bindings, method_arguments=method_definition.args
+    )
+    if find_refusal(method_definition, method_bindings) is not None:
+        return
+    if all(
+        isinstance(one_statement, ast.Pass)
+        or (isinstance(one_statement, ast.Expr) and isinstance(one_statement.value, ast.Constant))
+        for one_statement in method_definition.body
+    ):
+        return
+    if any(
+        isinstance(one_source_node, ast.Call)
+        and (
+            resolve_reference(one_source_node.func, method_bindings) in CLIENT_FACTORIES
+            or resolve_builtin(one_source_node.func, method_bindings) == "builtins.super"
+        )
+        for one_source_node in collect_scope_nodes(method_definition.body)
+    ):
+        return
+    receiver_diagnostic: typing.Final = check_receiver(method_definition)
+    if receiver_diagnostic is not None:
+        yield receiver_diagnostic
+
+
 def check_source(source_text: str, source_name: str) -> list[Diagnostic]:
     syntax_tree: typing.Final = ast.parse(source_text, filename=source_name)
     global_bindings: typing.Final = collect_bindings(syntax_tree.body, {})
@@ -266,6 +327,18 @@ def check_source(source_text: str, source_name: str) -> list[Diagnostic]:
         for one_method_definition in one_class_definition.body
         if isinstance(one_method_definition, (ast.FunctionDef, ast.AsyncFunctionDef))
         for one_diagnostic in check_method(
+            class_definition=one_class_definition,
+            method_definition=one_method_definition,
+            module_classes=module_classes,
+            global_bindings=global_bindings,
+        )
+    )
+    diagnostics_found.extend(
+        one_diagnostic
+        for one_class_definition in module_classes.values()
+        for one_method_definition in one_class_definition.body
+        if isinstance(one_method_definition, (ast.FunctionDef, ast.AsyncFunctionDef))
+        for one_diagnostic in check_method_responsibility(
             class_definition=one_class_definition,
             method_definition=one_method_definition,
             module_classes=module_classes,
