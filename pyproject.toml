@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pylines-solid"
+version = "0.1.0"
+description = "Small deterministic checks for Python SOLID patterns from pylines"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{name = "Denis"}]
+dependencies = []
+
+[project.scripts]
+pylines-solid = "pylines_solid.commands:run_command"
+
+[dependency-groups]
+dev = [
+    "auto-typing-final>=0.6",
+    "community-of-python-flake8-plugin>=0.6",
+    "flake8-pyproject>=1.2",
+    "mypy>=1.16",
+    "pytest>=8.4",
+    "pytest-cov>=7.0",
+    "pytest-xdist>=3.8",
+    "ruff>=0.14",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+# The repository license covers all files; repeating a header adds no information.
+ignore = ["D1", "D203", "D213", "COM812", "ISC001", "EM", "TRY003", "FBT", "FA", "CPY001"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S603"]
+
+[tool.mypy]
+strict = true
+files = ["pylines_solid", "tests"]
+
+[tool.flake8]
+select = ["COP"]
+
+[tool.pytest.ini_options]
+addopts = "-n auto --cov --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["pylines_solid", "tests"]
+branch = true
+patch = ["subprocess"]

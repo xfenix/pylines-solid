@@ -1,0 +1,5 @@
+- id: pylines-solid
+  name: pylines-solid
+  entry: pylines-solid
+  language: python
+  types: [python]
