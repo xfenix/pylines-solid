@@ -14,7 +14,7 @@ test:
 check: lint test
 
 build:
-    uv build
+    uv build --clear
 
 smoke:
     #!/usr/bin/env bash

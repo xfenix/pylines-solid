@@ -4,6 +4,7 @@ import types
 import typing
 
 from pylines_solid.diagnostics import Diagnostic
+from pylines_solid.dispatch import check_dispatch
 
 type MethodDefinition = ast.FunctionDef | ast.AsyncFunctionDef
 type ScopeBindings = collections.abc.Mapping[str, str | None]
@@ -13,6 +14,11 @@ CLIENT_FACTORIES: typing.Final = frozenset(
         "httpx.Client",
         "httpx.AsyncClient",
         "aiohttp.ClientSession",
+        "asyncpg.connect",
+        "asyncpg.create_pool",
+        "aiokafka.connect",
+        "aiokafka.AIOKafkaProducer",
+        "aiokafka.AIOKafkaConsumer",
         "redis.Redis",
         "redis.StrictRedis",
         "redis.asyncio.Redis",
@@ -248,7 +254,8 @@ def check_source(source_text: str, source_name: str) -> list[Diagnostic]:
         for one_statement_node in syntax_tree.body
         if isinstance(one_statement_node, ast.ClassDef)
     }
-    return [
+    diagnostics_found: typing.Final = list(check_dispatch(syntax_tree))
+    diagnostics_found.extend(
         one_diagnostic
         for one_class_definition in module_classes.values()
         for one_method_definition in one_class_definition.body
@@ -259,4 +266,5 @@ def check_source(source_text: str, source_name: str) -> list[Diagnostic]:
             module_classes=module_classes,
             global_bindings=global_bindings,
         )
-    ]
+    )
+    return diagnostics_found
