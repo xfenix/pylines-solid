@@ -80,7 +80,10 @@ def run_command(command_arguments: collections.abc.Sequence[str] | None = None) 
     argument_parser: typing.Final = argparse.ArgumentParser(description="Check concrete SOLID patterns from pylines.")
     argument_parser.add_argument("paths", nargs="*", default=["."], help="Python files or directories (default: .)")
     argument_parser.add_argument(
-        "--types", action="store_true", help="Check annotated type contracts with mypy (types extra)"
+        "--types",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Check type contracts with mypy (enabled by default; --no-types runs only AST checks)",
     )
     parsed_arguments: typing.Final = argument_parser.parse_args(command_arguments)
     try:

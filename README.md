@@ -1,14 +1,14 @@
 # pylines-solid
 
-Deterministic checks for SOLID patterns from [pylines](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md) and explicit team rules. The default AST checks use only Python's standard library and never import or execute inspected files. Optional `--types` delegates type analysis to mypy; no AI is used.
+Deterministic checks for SOLID patterns from [pylines](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md) and explicit team rules. AST checks and mypy type-contract checks run together by default. Mypy is installed with the package; no AI is used.
 
 Supports Python 3.14 and 3.15. Run with the same Python version as the code being checked.
 
 ```sh
-uvx --from git+https://github.com/xfenix/pylines-solid.git pylines-solid .
+uv run --with 'pylines-solid @ git+https://github.com/xfenix/pylines-solid.git' pylines-solid .
 ```
 
-The package is not published to PyPI. Pin a Git commit when using it in CI. The repository also provides a [pre-commit hook](.pre-commit-hooks.yaml).
+Run in the project environment so mypy can see its dependencies and stubs. The package is not published to PyPI. Pin a Git commit when using it in CI. The repository also provides a [pre-commit hook](.pre-commit-hooks.yaml); its isolated environment needs the project's typing dependencies or a configured mypy `python_executable`.
 
 ## Checks
 
@@ -20,8 +20,8 @@ The package is not published to PyPI. Pin a Git commit when using it in CI. The 
 | `PLS004 [OCP]` | [Open/Closed](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-открытостизакрытости-openclosed-principle-ocp) | A dispatcher maps ≥3 string values to distinct handlers. A registry allows new handlers without editing its branches. |
 | `PLS005 [SRP]` | Single Responsibility — team rule | A method uses `@staticmethod`. Move independent behavior to a module function. The team's ban applies even to abstract/protocol declarations. |
 | `PLS006 [SRP]` | Single Responsibility — cohesion signal | A concrete method body never uses its instance/class receiver. Move the behavior to a module function or the responsible object. |
-| `PLS007 [LSP]` | Liskov Substitution — `--types` | An override narrows accepted arguments, widens its result, breaks the call signature or narrows a writable attribute. Preserve the base type contract. |
-| `PLS000` | Input validation | Fix the unreadable source, invalid Python or suppression. |
+| `PLS007 [LSP]` | Liskov Substitution | An override narrows accepted arguments, widens its result, breaks the call signature or narrows a writable attribute. Preserve the base type contract. |
+| `PLS000` | Tool error; no SOLID principle | The check could not finish correctly: fix unreadable input, invalid Python/suppression or an unavailable type checker. |
 
 Each SOLID diagnostic names the principle, explains the observed pattern and suggests a change. `Possible violation` means the reviewer must confirm that the principle applies to this design. For example:
 
@@ -69,11 +69,7 @@ Injected concrete client types are allowed. `Protocol` is not required for every
 
 `PLS006` checks the body using Python's lexical scopes. A parameter name in the signature, a comment, a string or an annotation does not count. Attribute access, passing the receiver to another function, closure capture and `super()` count. A nested parameter or comprehension variable named `self` does not count as use of the outer receiver. Positional-only arguments, custom receiver names, `classmethod`, properties and async methods are supported.
 
-For LSP across files, install the `types` extra and run in an environment with the project's dependencies and stubs:
-
-```sh
-uv run --with 'pylines-solid[types] @ git+https://github.com/xfenix/pylines-solid.git' pylines-solid --types .
-```
+LSP checks resolve type contracts across files on every normal run. The quickstart above includes them without additional flags or extras.
 
 If `SpecialValue` inherits `GeneralValue`, these overrides illustrate the contract:
 
@@ -84,7 +80,7 @@ If `SpecialValue` inherits `GeneralValue`, these overrides illustrate the contra
 | `handle() -> SpecialValue` | `handle() -> GeneralValue` | LSP violation: promises a weaker result. |
 | `handle() -> GeneralValue` | `handle() -> SpecialValue` | Compatible: returns a valid subtype. |
 
-`--types` runs mypy in strict mode with `override` and `mutable-override` enabled. It resolves imported hierarchies, aliases and generic substitutions. Other type errors are reported as `MYPY [code]`, so missing annotations or imports cannot silently make the run green. Missing mypy, invalid output or engine failure is an input error. Project mypy configuration applies, including plugins and configured ignores; plugins can execute code. Ordinary mypy errors use its `type: ignore[code]` mechanism; `PLS007` also supports the reasoned suppression below.
+Mypy runs in strict mode with `override` and `mutable-override` enabled. It resolves imported hierarchies, aliases and generic substitutions. Other type errors are reported as `MYPY [code]`, so missing annotations or imports cannot silently make the run green. Missing mypy, invalid output or engine failure produces `PLS000`. Project mypy configuration applies, including plugins and configured ignores; plugins can execute code. Ordinary mypy errors use its `type: ignore[code]` mechanism; `PLS007` also supports the reasoned suppression below.
 
 ## Output and exceptions
 
@@ -112,6 +108,6 @@ Client detection recognizes supported imported names and aliases, including impo
 
 `PLS005`/`PLS006` cover module-level classes and recognized decorator aliases. For receiver checks, abstract/Protocol declarations, stubs, special methods, known local overrides and methods with other decorators are skipped. Use `@typing.override` for imported contracts. Methods already reported for refusal or infrastructure construction are not reported again for missing receiver use. This is lexical use, not control-flow proof: dead code or rebinding can still hide independent behavior. Receiver use alone does not prove a single responsibility.
 
-`PLS007` checks declared type contracts, not runtime preconditions, side effects or exception behavior. `Any`, ignored errors, missing type information and dynamic dispatch limit the guarantee. Core AST mode does not run this type check; enable `--types` in CI for it.
+`PLS007` checks declared type contracts, not runtime preconditions, side effects or exception behavior. `Any`, ignored errors, missing type information and dynamic dispatch limit the guarantee. `--no-types` explicitly selects AST-only checks, which never import or execute inspected files and do not run `PLS007`.
 
 Development commands and checks live in the [Justfile](Justfile). The [CI workflow](.github/workflows/check.yml) runs them on the supported interpreter versions.

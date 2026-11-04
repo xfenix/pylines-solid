@@ -4,9 +4,8 @@ lint:
     uv run --locked ruff format --check
     uv run --locked ruff check --no-fix
     uv run --locked flake8 pylines_solid tests
-    uv run --locked mypy
     uv run --locked auto-typing-final --check pylines_solid tests
-    uv run --locked pylines-solid pylines_solid
+    uv run --locked pylines-solid pylines_solid tests
 
 test:
     uv run --locked pytest

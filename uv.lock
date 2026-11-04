@@ -469,11 +469,9 @@ wheels = [
 
 [[package]]
 name = "pylines-solid"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
-
-[package.optional-dependencies]
-types = [
+dependencies = [
     { name = "mypy" },
 ]
 
@@ -482,7 +480,6 @@ dev = [
     { name = "auto-typing-final" },
     { name = "community-of-python-flake8-plugin" },
     { name = "flake8-pyproject" },
-    { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
@@ -490,7 +487,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mypy", marker = "extra == 'types'", specifier = ">=2.4,<3" }]
+requires-dist = [{ name = "mypy", specifier = ">=2.4,<3" }]
 provides-extras = ["types"]
 
 [package.metadata.requires-dev]
@@ -498,7 +495,6 @@ dev = [
     { name = "auto-typing-final", specifier = ">=0.6" },
     { name = "community-of-python-flake8-plugin", specifier = ">=0.6" },
     { name = "flake8-pyproject", specifier = ">=1.2" },
-    { name = "mypy", specifier = ">=1.16" },
     { name = "pytest", specifier = ">=8.4" },
     { name = "pytest-cov", specifier = ">=7.0" },
     { name = "pytest-xdist", specifier = ">=3.8" },

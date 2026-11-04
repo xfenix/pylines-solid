@@ -4,26 +4,26 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pylines-solid"
-version = "0.3.0"
+version = "0.4.0"
 description = "Small deterministic checks for Python SOLID patterns from pylines"
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
 authors = [{name = "Denis"}]
-dependencies = []
+dependencies = ["mypy>=2.4,<3"]
 
 [project.scripts]
 pylines-solid = "pylines_solid.commands:run_command"
 
 [project.optional-dependencies]
-types = ["mypy>=2.4,<3"]
+# Preserve installation commands from 0.3; mypy is now a required dependency.
+types = []
 
 [dependency-groups]
 dev = [
     "auto-typing-final>=0.6",
     "community-of-python-flake8-plugin>=0.6",
     "flake8-pyproject>=1.2",
-    "mypy>=1.16",
     "pytest>=8.4",
     "pytest-cov>=7.0",
     "pytest-xdist>=3.8",

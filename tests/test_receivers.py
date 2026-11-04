@@ -51,7 +51,7 @@ def test_check_receiver_use_in_body(tmp_path: pathlib.Path, method_body: str, ex
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode != INPUT_ERROR_EXIT, completed_process.stdout + completed_process.stderr
     assert completed_process.stdout.count("PLS006 [SRP]") == expected_findings
@@ -141,7 +141,7 @@ def test_check_method_binding(tmp_path: pathlib.Path, source_text: str, expected
     source_path: typing.Final = tmp_path / "method_binding.py"
     source_path.write_text(source_text, encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == bool(expected_code), completed_process.stdout + completed_process.stderr
     assert (f"{expected_code} [SRP]" in completed_process.stdout) if expected_code else not completed_process.stdout

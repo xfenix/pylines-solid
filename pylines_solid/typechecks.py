@@ -40,9 +40,7 @@ def parse_type_diagnostic(message_record: object) -> tuple[pathlib.Path, Diagnos
 
 def check_types(source_paths: list[pathlib.Path]) -> dict[pathlib.Path, list[Diagnostic]]:
     if importlib.util.find_spec("mypy") is None:
-        raise ValueError(
-            "Type checking requires pylines-solid[types]; install the types extra in your project environment."
-        )
+        raise ValueError("mypy is missing; reinstall pylines-solid with its dependencies in the project environment.")
     if any(not one_source_path.is_file() for one_source_path in source_paths):
         raise ValueError("Type checking requires regular Python files.")
     completed_process: typing.Final = subprocess.run(  # noqa: S603 -- fixed interpreter and module; paths are separate arguments

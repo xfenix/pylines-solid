@@ -192,7 +192,7 @@ def test_check_literal_dispatch(tmp_path: pathlib.Path, source_text: str, expect
     source_path: typing.Final = tmp_path / "command_dispatch.py"
     source_path.write_text(textwrap.dedent(source_text).lstrip(), encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == bool(expected_findings), completed_process.stdout + completed_process.stderr
     assert completed_process.stdout.count("PLS004 [OCP]") == expected_findings
@@ -215,7 +215,7 @@ def test_separate_infrastructure_setup_from_user_behavior(tmp_path: pathlib.Path
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == (0 if inject_connections else 1), completed_process.stderr
     assert completed_process.stdout.count("PLS003 [SRP/DIP]") == (0 if inject_connections else 2)

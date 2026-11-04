@@ -63,7 +63,7 @@ def test_check_inherited_type_contracts(
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(tmp_path, working_directory=tmp_path, checker_options=("--types",))
+    completed_process: typing.Final = run_checker(tmp_path, working_directory=tmp_path)
 
     assert completed_process.returncode == expected_violation, completed_process.stdout + completed_process.stderr
     assert ("PLS007 [LSP]" in completed_process.stdout) == expected_violation
@@ -89,7 +89,7 @@ def test_check_generic_specialization(tmp_path: pathlib.Path, *, suppress_violat
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path, working_directory=tmp_path, checker_options=("--types",))
+    completed_process: typing.Final = run_checker(source_path, working_directory=tmp_path)
 
     assert completed_process.returncode == (not suppress_violation), completed_process.stdout + completed_process.stderr
     assert ("PLS007 [LSP]" in completed_process.stdout) == (not suppress_violation)
@@ -115,34 +115,43 @@ def test_report_type_contract_gaps(tmp_path: pathlib.Path, source_text: str, exp
     source_path: typing.Final = tmp_path / "typing_gap.py"
     source_path.write_text(source_text, encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(source_path, working_directory=tmp_path, checker_options=("--types",))
+    completed_process: typing.Final = run_checker(source_path, working_directory=tmp_path)
 
     assert completed_process.returncode == 1, completed_process.stdout + completed_process.stderr
     assert expected_marker in completed_process.stdout
 
 
-def test_require_type_engine_for_types_mode(tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize(
+    ("checker_options", "expected_exit"),
+    [((), INPUT_ERROR_EXIT), (("--no-types",), 0)],
+)
+def test_require_type_engine_by_default(
+    tmp_path: pathlib.Path, checker_options: tuple[str, ...], expected_exit: int
+) -> None:
     source_path: typing.Final = tmp_path / "valid_source.py"
     source_path.write_text("value_count = 1\n", encoding="utf-8")
 
     completed_process: typing.Final = subprocess.run(
-        [sys.executable, "-S", "-m", "pylines_solid", "--types", str(source_path)],
+        [sys.executable, "-S", "-m", "pylines_solid", *checker_options, str(source_path)],
         capture_output=True,
         text=True,
         check=False,
         timeout=10,
     )
 
-    assert completed_process.returncode == INPUT_ERROR_EXIT
-    assert "PLS000" in completed_process.stdout
-    assert "types extra" in completed_process.stdout
+    assert completed_process.returncode == expected_exit
+    if expected_exit:
+        assert "PLS000" in completed_process.stdout
+        assert "mypy" in completed_process.stdout
+    else:
+        assert completed_process.stdout == ""
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="Named pipes are unavailable on this platform")
 def test_reject_named_pipe_before_type_analysis(tmp_path: pathlib.Path) -> None:
     os.mkfifo(tmp_path / "waiting_source.py")
 
-    completed_process: typing.Final = run_checker(tmp_path, working_directory=tmp_path, checker_options=("--types",))
+    completed_process: typing.Final = run_checker(tmp_path, working_directory=tmp_path)
 
     assert completed_process.returncode == INPUT_ERROR_EXIT
     assert "regular Python files" in completed_process.stdout
@@ -153,7 +162,7 @@ def test_report_type_engine_configuration_failure(tmp_path: pathlib.Path) -> Non
     source_path: typing.Final = tmp_path / "valid_source.py"
     source_path.write_text("value_count = 1\n", encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(source_path, working_directory=tmp_path, checker_options=("--types",))
+    completed_process: typing.Final = run_checker(source_path, working_directory=tmp_path)
 
     assert completed_process.returncode == INPUT_ERROR_EXIT
     assert "PLS000 mypy failed" in completed_process.stdout

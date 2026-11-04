@@ -193,7 +193,7 @@ def test_check_declared_capabilities(
     source_path: typing.Final = tmp_path / "capabilities.py"
     source_path.write_text(textwrap.dedent(source_text), encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == int(bool(expected_diagnostics)), completed_process.stderr
     assert tuple(re.findall(r": (PLS\d{3} \[[A-Z/]+\]) ", completed_process.stdout)) == expected_diagnostics
@@ -228,7 +228,7 @@ def test_report_infrastructure_construction(
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == 1, completed_process.stderr
     assert re.fullmatch(rf"{re.escape(str(source_path))}:4:\d+: PLS003 \[SRP/DIP\] .+\n", completed_process.stdout)
@@ -243,7 +243,7 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == 1, completed_process.stderr
     assert "PLS003" in completed_process.stdout
@@ -342,7 +342,7 @@ def test_accept_dependency_injection_and_shadowed_imports(tmp_path: pathlib.Path
     source_path: typing.Final = tmp_path / "accepted_connections.py"
     source_path.write_text(textwrap.dedent(source_text), encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert (completed_process.returncode, completed_process.stdout) == (0, "")
 
@@ -355,7 +355,7 @@ def test_report_method_local_import(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == 1
     assert ": PLS003 " in completed_process.stdout
@@ -387,7 +387,7 @@ def test_require_real_targeted_suppressions(
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == expected_exit, completed_process.stderr
     assert expected_code in completed_process.stdout
@@ -398,7 +398,7 @@ def test_reject_unreadable_python(tmp_path: pathlib.Path, source_bytes: bytes) -
     source_path: typing.Final = tmp_path / "invalid_source.py"
     source_path.write_bytes(source_bytes)
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == INPUT_ERROR_EXIT
     assert ": PLS000 " in completed_process.stdout
@@ -419,7 +419,7 @@ def test_read_declared_encoding_without_executing_source(tmp_path: pathlib.Path)
         f"# coding: latin-1\nimport pathlib\npathlib.Path({str(marker_path)!r}).write_text('café')\n".encode("latin-1")
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == 0
     assert not marker_path.exists()
@@ -442,7 +442,7 @@ def test_scan_sorted_unique_files_without_following_symlink_directories(tmp_path
     for one_source_path in source_paths:
         one_source_path.write_text(refusal_source, encoding="utf-8")
 
-    completed_process: typing.Final = run_checker(project_path, *source_paths)
+    completed_process: typing.Final = run_checker(project_path, *source_paths, checker_options=("--no-types",))
 
     assert completed_process.returncode == 1
     assert tuple(
@@ -466,7 +466,7 @@ def test_report_client_created_in_protocol_default_method(tmp_path: pathlib.Path
         encoding="utf-8",
     )
 
-    completed_process: typing.Final = run_checker(source_path)
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
 
     assert completed_process.returncode == 1
     assert ": PLS003 " in completed_process.stdout
