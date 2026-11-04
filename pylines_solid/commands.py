@@ -1,5 +1,4 @@
 import argparse
-import collections.abc
 import pathlib
 import sys
 import tokenize
@@ -8,6 +7,9 @@ import typing
 from pylines_solid.analysis import check_source
 from pylines_solid.comments import apply_suppressions
 from pylines_solid.diagnostics import Diagnostic
+
+if typing.TYPE_CHECKING:
+    import collections.abc
 
 SKIPPED_DIRECTORIES: typing.Final = frozenset(
     {".git", ".venv", "venv", "__pycache__", "build", "dist", ".tox", ".mypy_cache", ".ruff_cache", ".pytest_cache"},

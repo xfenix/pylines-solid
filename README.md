@@ -2,7 +2,7 @@
 
 Small deterministic checks for concrete SOLID patterns from [pylines](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md). Uses Python's AST, without AI or runtime dependencies. It reads source files; it never imports or executes them.
 
-Requires Python 3.12 or newer. Run with the same Python version as the code being checked.
+Supports Python 3.14 and 3.15. Run with the same Python version as the code being checked.
 
 ```sh
 uvx --from git+https://github.com/xfenix/pylines-solid.git pylines-solid .

@@ -1,5 +1,4 @@
 import os
-import pathlib
 import re
 import subprocess
 import sys
@@ -7,6 +6,9 @@ import textwrap
 import typing
 
 import pytest
+
+if typing.TYPE_CHECKING:
+    import pathlib
 
 PROCESS_TIMEOUT: typing.Final = 10
 FIFO_TIMEOUT_SECONDS: typing.Final = 2

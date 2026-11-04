@@ -7,7 +7,7 @@ name = "pylines-solid"
 version = "0.1.0"
 description = "Small deterministic checks for Python SOLID patterns from pylines"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 authors = [{name = "Denis"}]
 dependencies = []
@@ -29,7 +29,7 @@ dev = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["ALL"]
