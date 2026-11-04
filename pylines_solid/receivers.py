@@ -12,10 +12,18 @@ class PreserveComprehensionScopes(ast.NodeTransformer):
         visited_node: typing.Final = super().generic_visit(source_node)
         # CPython inlines comprehensions and loses some receiver references in symtable.
         if isinstance(visited_node, (ast.ListComp, ast.SetComp)):
-            return ast.GeneratorExp(elt=visited_node.elt, generators=visited_node.generators)
+            return ast.GeneratorExp(
+                elt=visited_node.elt.value if isinstance(visited_node.elt, ast.Starred) else visited_node.elt,
+                generators=visited_node.generators,
+            )
         if isinstance(visited_node, ast.DictComp):
             return ast.GeneratorExp(
-                elt=ast.Tuple(elts=[visited_node.key, visited_node.value], ctx=ast.Load()),
+                elt=ast.Tuple(
+                    elts=[
+                        one_element for one_element in (visited_node.key, visited_node.value) if one_element is not None
+                    ],
+                    ctx=ast.Load(),
+                ),
                 generators=visited_node.generators,
             )
         return visited_node

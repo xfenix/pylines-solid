@@ -72,7 +72,7 @@ Injected concrete client types are allowed. `Protocol` is not required for every
 For LSP across files, install the `types` extra and run in an environment with the project's dependencies and stubs:
 
 ```sh
-uvx --from 'pylines-solid[types] @ git+https://github.com/xfenix/pylines-solid.git' pylines-solid --types .
+uv run --with 'pylines-solid[types] @ git+https://github.com/xfenix/pylines-solid.git' pylines-solid --types .
 ```
 
 If `SpecialValue` inherits `GeneralValue`, these overrides illustrate the contract:

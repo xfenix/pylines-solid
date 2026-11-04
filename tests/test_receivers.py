@@ -1,3 +1,4 @@
+import sys
 import textwrap
 import typing
 
@@ -7,6 +8,10 @@ from tests.test_commands import INPUT_ERROR_EXIT, run_checker
 
 if typing.TYPE_CHECKING:
     import pathlib
+
+REQUIRES_PYTHON_315: typing.Final = pytest.mark.skipif(
+    sys.version_info < (3, 15), reason="Unpacking comprehensions require Python 3.15"
+)
 
 
 @pytest.mark.parametrize(
@@ -32,6 +37,11 @@ if typing.TYPE_CHECKING:
         ("pass", 0),
         ("...", 0),
         ("raise NotImplementedError", 0),
+        pytest.param("return [*self.items for item in values]", 0, marks=REQUIRES_PYTHON_315),
+        pytest.param("return {*self.items for item in values}", 0, marks=REQUIRES_PYTHON_315),
+        pytest.param("return {**self.mapping for item in values}", 0, marks=REQUIRES_PYTHON_315),
+        pytest.param("return [*self for self in values]", 1, marks=REQUIRES_PYTHON_315),
+        pytest.param("return {**self for self in values}", 1, marks=REQUIRES_PYTHON_315),
     ],
 )
 def test_check_receiver_use_in_body(tmp_path: pathlib.Path, method_body: str, expected_findings: int) -> None:
