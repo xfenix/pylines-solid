@@ -12,13 +12,19 @@ The package is not published to PyPI. Pin a Git commit when using it in CI. The 
 
 ## Checks
 
-| Code | Pattern |
-|---|---|
-| `PLS001` | A method refuses a known local inherited capability with an unconditional `NotImplementedError`. |
-| `PLS002` | Another concrete method unconditionally raises `NotImplementedError`: a candidate for splitting the interface or declaring the method abstract. |
-| `PLS003` | SRP/DI: a class method owns infrastructure setup, constructing a recognized HTTP, Redis, database or Kafka client instead of receiving it. |
-| `PLS004` | OCP: an `if/elif` or `match` dispatcher maps three or more string values to distinct handlers; consider a handler registry. |
-| `PLS000` | Input or suppression error. |
+| Code / CLI tag | SOLID principle | Signal and suggested change |
+|---|---|---|
+| `PLS001 [LSP]` | [Liskov Substitution](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-подстановки-лисков-liskov-substitution-principle-lsp) | An override always raises `NotImplementedError` instead of providing known local base behavior. Preserve the base contract or split the hierarchy. |
+| `PLS002 [ISP]` | [Interface Segregation](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-разделения-интерфейсов-interface-segregation-principle-isp) | A concrete method always raises `NotImplementedError`, suggesting an unsupported capability. Narrow the interface or declare a genuinely abstract method. |
+| `PLS003 [SRP/DIP]` | [Single Responsibility](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-единой-ответственности-single-responsibility-principle-srp) / [Dependency Inversion](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-инверсии-зависимостей-dependency-inversion-principle-dip) | A class method creates an HTTP, Redis, database or Kafka client: it owns infrastructure setup and depends on a concrete factory. Separate setup from behavior and pass the client in. |
+| `PLS004 [OCP]` | [Open/Closed](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-открытостизакрытости-openclosed-principle-ocp) | A dispatcher maps ≥3 string values to distinct handlers. A registry allows new handlers without editing its branches. |
+| `PLS000` | Input validation | Fix the unreadable source, invalid Python or suppression. |
+
+Each SOLID diagnostic names the principle, explains the observed pattern and suggests a change. `Possible violation` means the reviewer must confirm that the principle applies to this design. For example:
+
+```text
+service.py:12:18: PLS003 [SRP/DIP] Possible violation: method owns infrastructure setup; separate setup from behavior and inject the client.
+```
 
 For example, `PLS003` flags construction inside a method:
 
@@ -50,7 +56,7 @@ class BalanceReader:
 
 Injected concrete client types are allowed. `Protocol` is not required for every dependency.
 
-`PLS003` also covers the SRP example in pylines: a user service creates PostgreSQL and Kafka connections itself. Supported factories include `asyncpg.connect`, `asyncpg.create_pool` and `aiokafka` producers/consumers. Passing connections into the service separates setup from user behavior. This is one check spanning SRP and DI, not two duplicate diagnostics.
+`PLS003` covers the shared SRP/DIP setup-and-injection examples in pylines: a user service creates PostgreSQL and Kafka connections itself. Supported factories include `asyncpg.connect`, `asyncpg.create_pool` and `aiokafka` producers/consumers. Dependency injection (DI) is the suggested technique: pass connections into the service to separate setup from user behavior. The `[SRP/DIP]` tag describes this narrow pattern; the checker does not verify every dependency abstraction required by DIP.
 
 `PLS004` follows the command-dispatch example in pylines. Adding a command to a chain edits the dispatcher; a registry lets callers add a handler without rewriting it. A finding belongs to the first `if` or the `match` line. A fixed protocol can reasonably keep explicit branches; explain that choice with a suppression.
 

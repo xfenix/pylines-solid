@@ -195,7 +195,7 @@ def test_check_literal_dispatch(tmp_path: pathlib.Path, source_text: str, expect
     completed_process: typing.Final = run_checker(source_path)
 
     assert completed_process.returncode == bool(expected_findings), completed_process.stdout + completed_process.stderr
-    assert completed_process.stdout.count("PLS004") == expected_findings
+    assert completed_process.stdout.count("PLS004 [OCP]") == expected_findings
     assert len(completed_process.stdout.splitlines()) == expected_findings
 
 
@@ -218,4 +218,4 @@ def test_separate_infrastructure_setup_from_user_behavior(tmp_path: pathlib.Path
     completed_process: typing.Final = run_checker(source_path)
 
     assert completed_process.returncode == (0 if inject_connections else 1), completed_process.stderr
-    assert completed_process.stdout.count("PLS003") == (0 if inject_connections else 2)
+    assert completed_process.stdout.count("PLS003 [SRP/DIP]") == (0 if inject_connections else 2)

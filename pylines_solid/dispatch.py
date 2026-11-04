@@ -120,7 +120,7 @@ def check_dispatch(syntax_tree: ast.Module) -> collections.abc.Iterator[Diagnost
                 column_number=one_source_node.col_offset + 1,
                 rule_code="PLS004",
                 message_text=(
-                    f"Literal dispatch selects {len(dispatch_routes)} different handlers; "
-                    "consider a handler registry for extension."
+                    f"[OCP] Possible violation: dispatcher hardcodes {len(dispatch_routes)} handlers; "
+                    "use a registry to add handlers without editing branches."
                 ),
             )

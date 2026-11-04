@@ -228,9 +228,11 @@ def check_method(
             column_number=refused_statement.col_offset + 1,
             rule_code="PLS001" if overrides_behavior else "PLS002",
             message_text=(
-                "Override refuses inherited behavior; preserve the contract or separate the capability."
+                "[LSP] Possible violation: subtype rejects inherited behavior; "
+                "preserve the base contract or split the hierarchy."
                 if overrides_behavior
-                else "Concrete method refuses a capability; split the interface or declare an abstract method."
+                else "[ISP] Possible violation: concrete method rejects a capability; "
+                "narrow the interface or declare it abstract."
             ),
         )
     for one_source_node in collect_scope_nodes(method_definition.body):
@@ -242,7 +244,10 @@ def check_method(
                 line_number=one_source_node.lineno,
                 column_number=one_source_node.col_offset + 1,
                 rule_code="PLS003",
-                message_text="Infrastructure client is created inside a method; inject it from the composition root.",
+                message_text=(
+                    "[SRP/DIP] Possible violation: method owns infrastructure setup; "
+                    "separate setup from behavior and inject the client."
+                ),
             )
 
 

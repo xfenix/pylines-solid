@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pylines-solid"
-version = "0.2.0"
+version = "0.2.1"
 description = "Small deterministic checks for Python SOLID patterns from pylines"
 readme = "README.md"
 requires-python = ">=3.14"

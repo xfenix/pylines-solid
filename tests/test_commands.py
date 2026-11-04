@@ -30,7 +30,7 @@ def run_checker(
 
 
 @pytest.mark.parametrize(
-    ("source_text", "expected_codes"),
+    ("source_text", "expected_diagnostics"),
     [
         pytest.param(
             """
@@ -43,7 +43,7 @@ def run_checker(
                     "Cannot fly."
                     raise NotImplementedError("Penguins cannot fly")
             """,
-            ("PLS001",),
+            ("PLS001 [LSP]",),
             id="inherited-behavior-refused",
         ),
         pytest.param(
@@ -56,7 +56,7 @@ def run_checker(
                 def perform_flight(self):
                     raise NotImplementedError
             """,
-            ("PLS001",),
+            ("PLS001 [LSP]",),
             id="pylines-ellipsis-is-not-abstract",
         ),
         pytest.param(
@@ -71,7 +71,7 @@ def run_checker(
                 def control_temperature(self):
                     raise NotImplementedError("A light cannot heat")
             """,
-            ("PLS002",),
+            ("PLS002 [ISP]",),
             id="structural-interface-refused",
         ),
         pytest.param(
@@ -87,7 +87,7 @@ def run_checker(
                 def control_temperature(self):
                     raise NotImplementedError
             """,
-            ("PLS002",),
+            ("PLS002 [ISP]",),
             id="abstract-parent-concrete-refusal",
         ),
         pytest.param(
@@ -119,7 +119,7 @@ def run_checker(
                 def fetch_payload(self):
                     raise NotImplementedError
             """,
-            ("PLS002",),
+            ("PLS002 [ISP]",),
             id="inherited-class-local-abstract-decorator",
         ),
         pytest.param(
@@ -162,7 +162,7 @@ def run_checker(
                 async def control_temperature(self):
                     raise NotImplementedError
             """,
-            ("PLS002",),
+            ("PLS002 [ISP]",),
             id="async-refusal",
         ),
         pytest.param(
@@ -181,15 +181,15 @@ def run_checker(
 def test_check_declared_capabilities(
     tmp_path: pathlib.Path,
     source_text: str,
-    expected_codes: tuple[str, ...],
+    expected_diagnostics: tuple[str, ...],
 ) -> None:
     source_path: typing.Final = tmp_path / "capabilities.py"
     source_path.write_text(textwrap.dedent(source_text), encoding="utf-8")
 
     completed_process: typing.Final = run_checker(source_path)
 
-    assert completed_process.returncode == int(bool(expected_codes)), completed_process.stderr
-    assert tuple(re.findall(r": (PLS\d{3}) ", completed_process.stdout)) == expected_codes
+    assert completed_process.returncode == int(bool(expected_diagnostics)), completed_process.stderr
+    assert tuple(re.findall(r": (PLS\d{3} \[[A-Z/]+\]) ", completed_process.stdout)) == expected_diagnostics
 
 
 @pytest.mark.parametrize(
@@ -224,7 +224,7 @@ def test_report_infrastructure_construction(
     completed_process: typing.Final = run_checker(source_path)
 
     assert completed_process.returncode == 1, completed_process.stderr
-    assert re.fullmatch(rf"{re.escape(str(source_path))}:4:\d+: PLS003 .+\n", completed_process.stdout)
+    assert re.fullmatch(rf"{re.escape(str(source_path))}:4:\d+: PLS003 \[SRP/DIP\] .+\n", completed_process.stdout)
 
 
 def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> None:
