@@ -214,6 +214,28 @@ def test_check_declared_capabilities(
         ("import redis.asyncio", "redis.asyncio.Redis()"),
         ("from psycopg import connect as open_database", "open_database()"),
         ("from sqlalchemy.ext.asyncio import create_async_engine", "create_async_engine()"),
+        ("import requests", "requests.Session()"),
+        ("from requests import post as send_request", "send_request('https://example.invalid')"),
+        ("import urllib3", "urllib3.PoolManager()"),
+        ("import urllib.request", "urllib.request.urlopen('https://example.invalid')"),
+        ("import http.client", "http.client.HTTPSConnection('example.invalid')"),
+        ("import httpcore", "httpcore.AsyncConnectionPool()"),
+        ("import aiohttp", "aiohttp.request('GET', 'https://example.invalid')"),
+        ("import sqlalchemy.orm", "sqlalchemy.orm.Session()"),
+        ("import pymongo", "pymongo.MongoClient()"),
+        ("import motor.motor_asyncio", "motor.motor_asyncio.AsyncIOMotorClient()"),
+        ("import aiomysql", "aiomysql.create_pool()"),
+        ("import kafka", "kafka.KafkaProducer()"),
+        ("import confluent_kafka", "confluent_kafka.Producer({})"),
+        ("import redis", "redis.from_url('redis://localhost')"),
+        ("import redis.cluster", "redis.cluster.RedisCluster()"),
+        ("import redis.sentinel", "redis.sentinel.Sentinel()"),
+        ("import boto3", "boto3.client('s3')"),
+        ("import custom_http", "custom_http.AsyncClient()"),
+        ("import asks", "asks.Session()"),
+        ("import treq", "treq.get('https://example.invalid')"),
+        ("import pycurl", "pycurl.Curl()"),
+        ("import niquests", "niquests.Session()"),
     ],
 )
 def test_report_infrastructure_construction(
@@ -232,6 +254,29 @@ def test_report_infrastructure_construction(
 
     assert completed_process.returncode == 1, completed_process.stderr
     assert re.fullmatch(rf"{re.escape(str(source_path))}:4:\d+: PLS003 \[SRP/DIP\] .+\n", completed_process.stdout)
+
+
+@pytest.mark.parametrize(
+    "field_definition",
+    [
+        "connection: httpx.Client = httpx.Client()",
+        "connection: httpx.Client = field(default_factory=httpx.Client)",
+        "connection: httpx.Client = field(default_factory=lambda: httpx.Client())",
+    ],
+)
+def test_report_dataclass_client_creation(tmp_path: pathlib.Path, field_definition: str) -> None:
+    source_path: typing.Final = tmp_path / "dataclass_client.py"
+    source_path.write_text(
+        "from dataclasses import dataclass, field\nimport httpx\n"
+        "@dataclass\nclass FetchService:\n"
+        f"    {field_definition}\n",
+        encoding="utf-8",
+    )
+
+    completed_process: typing.Final = run_checker(source_path, checker_options=("--no-types",))
+
+    assert completed_process.returncode == 1, completed_process.stdout + completed_process.stderr
+    assert completed_process.stdout.count("PLS003 [SRP/DIP]") == 1
 
 
 def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> None:
@@ -267,6 +312,36 @@ def test_report_client_despite_default_lambda_scope(tmp_path: pathlib.Path) -> N
                     return self.http_connection.get("https://example.invalid")
             """,
             id="factory-and-injected-client",
+        ),
+        pytest.param(
+            """
+            from dataclasses import dataclass
+            import httpx
+
+            @dataclass
+            class FetchService:
+                connection: httpx.Client
+
+                def fetch_remote(self):
+                    return self.connection.get("https://example.invalid")
+            """,
+            id="dataclass-with-injected-client",
+        ),
+        pytest.param(
+            """
+            import httpx
+            import requests
+            import sqlalchemy
+
+            class FetchService:
+                def fetch_remote(self):
+                    return (
+                        httpx.Request("GET", "https://example.invalid"),
+                        requests.Request("GET", "https://example.invalid"),
+                        sqlalchemy.select(self),
+                    )
+            """,
+            id="data-objects-and-query-builder-are-not-clients",
         ),
         pytest.param(
             """

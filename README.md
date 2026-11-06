@@ -1,7 +1,7 @@
 # pylines-solid
 
 [![CI](https://github.com/xfenix/pylines-solid/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/xfenix/pylines-solid/actions/workflows/check.yml)
-[![Coverage at v0.5.0: 94%](https://img.shields.io/badge/coverage%20v0.5.0-94%25-brightgreen)](https://github.com/xfenix/pylines-solid/actions/runs/42139251976)
+[![Coverage at v0.6.0: 93%](https://img.shields.io/badge/coverage%20v0.6.0-93%25-brightgreen)](https://github.com/xfenix/pylines-solid/actions/workflows/check.yml)
 
 `pylines-solid` checks specific Python [SOLID patterns in pylines](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md) and two team rules about method ownership. It uses AST analysis and mypy. It does not use AI. Every finding names the principle and the change to consider.
 
@@ -74,17 +74,19 @@ class PrintableDevice:
 
 ### PLS003 — Inject infrastructure clients [SRP/DIP]
 
-A service method must not create its own HTTP, database, Redis, or Kafka client. Pass the client into the service.
+A service must receive infrastructure clients from outside. Do not create one in a method or a `dataclass` field. Do not make a one-shot HTTP request from a service method.
 
 #### ✅ Compliant
 
 ```python
+from dataclasses import dataclass
+
 import httpx
 
 
+@dataclass
 class BalanceReader:
-    def __init__(self, connection: httpx.Client) -> None:
-        self.connection = connection
+    connection: httpx.Client
 
     def fetch_balance(self) -> httpx.Response:
         return self.connection.get("https://example.com/balance")
@@ -93,14 +95,20 @@ class BalanceReader:
 #### ❌ Violation
 
 ```python
+from dataclasses import dataclass, field
+
 import httpx
 
 
+@dataclass
 class BalanceReader:
+    connection: httpx.Client = field(default_factory=httpx.Client)
+
     def fetch_balance(self) -> httpx.Response:
-        connection = httpx.Client()
-        return connection.get("https://example.com/balance")
+        return self.connection.get("https://example.com/balance")
 ```
+
+The rule uses imported module names and resource names. It covers common HTTP, SQL, Redis, MongoDB, and Kafka clients. It also finds direct calls such as `requests.get()` or `urllib.request.urlopen()`. It does not report data objects such as `httpx.Request`. A custom library with unrelated names may need review.
 
 ### PLS004 — Extend a dispatcher without editing branches [OCP]
 
@@ -368,4 +376,4 @@ connection = httpx.Client()  # pylines-solid: ignore[PLS003] -- adapter owns thi
 
 Unknown codes, missing reasons, and unused suppressions are errors. The [pre-commit hook](.pre-commit-hooks.yaml) needs access to the project's typing dependencies. See the [Justfile](Justfile) for development checks.
 
-These rules detect specific patterns. They cannot prove full SOLID compliance. Review the reasons a class may change, the behavior of child classes, and the allowed import graph of each project. `PLS009` can flag a value object; inspect ownership before changing it. `PLS010` checks one guarded rejection pattern. `PLS011` skips clients that pass a protocol parameter to another function. `Any` and ignored mypy errors limit type checks. AST checks do not execute source files, but configured mypy plugins can run code.
+These rules detect specific patterns. They cannot prove full SOLID compliance. Review the reasons a class may change, the behavior of child classes, and the allowed import graph of each project. `PLS003` uses module and factory names, so custom naming can hide a client or trigger a review signal. `PLS009` can flag a value object; inspect ownership before changing it. `PLS010` checks one guarded rejection pattern. `PLS011` skips clients that pass a protocol parameter to another function. `Any` and ignored mypy errors limit type checks. AST checks do not execute source files, but configured mypy plugins can run code.
