@@ -23,7 +23,7 @@ The examples show the pattern each rule checks. A finding is a review signal, no
 
 A child method must not replace a working parent method with `NotImplementedError`.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class FlyingBird:
@@ -36,7 +36,7 @@ class PenguinBird:
         return str(self)
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class ParentBird:
@@ -53,7 +53,7 @@ class PenguinBird(ParentBird):
 
 A concrete method must not always reject a capability with `NotImplementedError`. Split the interface or make the method abstract.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class PrintableDevice:
@@ -61,7 +61,7 @@ class PrintableDevice:
         return str(self)
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class PrintableDevice:
@@ -76,7 +76,7 @@ class PrintableDevice:
 
 A service method must not create its own HTTP, database, Redis, or Kafka client. Pass the client into the service.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 import httpx
@@ -90,7 +90,7 @@ class BalanceReader:
         return self.connection.get("https://example.com/balance")
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 import httpx
@@ -106,7 +106,7 @@ class BalanceReader:
 
 A dispatcher with three or more literal routes should use a handler registry. A new handler can then be added without changing the branch chain.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 from collections.abc import Callable
@@ -116,7 +116,7 @@ def run_command(command_name: str, available_handlers: dict[str, Callable[[], st
     return available_handlers[command_name]()
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 from collections.abc import Callable
@@ -141,14 +141,14 @@ def run_command(
 
 Do not use `@staticmethod`. Put independent behavior in a module function. This team rule is stricter than SRP itself.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 def compute_total(values: list[int]) -> int:
     return sum(values)
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class InvoiceMath:
@@ -161,7 +161,7 @@ class InvoiceMath:
 
 A concrete method must use its instance or class receiver in the body. Move independent work to a module function.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class TextFormatter:
@@ -172,7 +172,7 @@ class TextFormatter:
         return self.prefix_text + input_text.strip()
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class TextFormatter:
@@ -184,7 +184,7 @@ class TextFormatter:
 
 A child method must accept all values accepted by the parent. Its return type must be at least as specific. Mypy checks this rule across files.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class ParentService:
@@ -197,7 +197,7 @@ class ChildService(ParentService):
         self.last_value = input_value
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class ParentService:
@@ -214,7 +214,7 @@ class ChildService(ParentService):
 
 Do not check a list of child types before calling a method they share. Declare the method in the base contract.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class ParentShape:
@@ -226,7 +226,7 @@ def draw_some_shape(shape_object: ParentShape) -> str:
     return shape_object.draw_shape()
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class ParentShape:
@@ -253,7 +253,7 @@ def draw_some_shape(shape_object: ParentShape) -> str:
 
 A class should not create a local class, store it, and call it from another method. Pass the collaborator in.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class MailNotifier:
@@ -269,7 +269,7 @@ class OrderService:
         return self.notifier.send_message(str(order_number))
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class MailNotifier:
@@ -289,7 +289,7 @@ class OrderService:
 
 A child method must not reject an argument that the parent accepts. This rule checks a direct `if` that raises `ValueError` or `TypeError`.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 class BalanceReader:
@@ -305,7 +305,7 @@ class PositiveReader(BalanceReader):
         return account_number + self.balance
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 class BalanceReader:
@@ -327,7 +327,7 @@ class PositiveReader(BalanceReader):
 
 A client should accept a `Protocol` with only the methods it calls. This rule checks direct calls on a local protocol parameter.
 
-**Compliant**
+#### ✅ Compliant
 
 ```python
 from typing import Protocol
@@ -341,7 +341,7 @@ def activate_device(device_object: SwitchableDevice) -> None:
     device_object.turn_on_device()
 ```
 
-**Violation**
+#### ❌ Violation
 
 ```python
 from typing import Protocol
