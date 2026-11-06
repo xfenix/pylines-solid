@@ -1,125 +1,371 @@
 # pylines-solid
 
-Deterministic checks for SOLID patterns from [pylines](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md) and explicit team rules. AST checks and mypy type-contract checks run together by default. Mypy is installed with the package; no AI is used.
+[![CI](https://github.com/xfenix/pylines-solid/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/xfenix/pylines-solid/actions/workflows/check.yml)
+[![Coverage at v0.5.0: 94%](https://img.shields.io/badge/coverage%20v0.5.0-94%25-brightgreen)](https://github.com/xfenix/pylines-solid/actions/runs/42139251976)
 
-Supports Python 3.14 and 3.15. Run with the same Python version as the code being checked.
+`pylines-solid` checks specific Python [SOLID patterns in pylines](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md) and two team rules about method ownership. It uses AST analysis and mypy. It does not use AI. Every finding names the principle and the change to consider.
+
+## Quickstart
+
+Use Python 3.14 or 3.15. Run the checker in your project environment so mypy can see your dependencies:
 
 ```sh
 uv run --with 'pylines-solid @ git+https://github.com/xfenix/pylines-solid.git' pylines-solid .
 ```
 
-Run in the project environment so mypy can see its dependencies and stubs. The package is not published to PyPI. Pin a Git commit when using it in CI. The repository also provides a [pre-commit hook](.pre-commit-hooks.yaml); its isolated environment needs the project's typing dependencies or a configured mypy `python_executable`.
+AST and type checks run by default. Exit code `0` means no findings; `1` means findings; `2` means the check could not finish. Use `--no-types` only when you need AST checks without mypy. Pin a Git commit in CI. The package is not on PyPI.
 
-## Checks
+## Rules
 
-| Code / CLI tag | SOLID principle | Signal and suggested change |
-|---|---|---|
-| `PLS001 [LSP]` | [Liskov Substitution](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-подстановки-лисков-liskov-substitution-principle-lsp) | An override always raises `NotImplementedError` instead of providing known local base behavior. Preserve the base contract or split the hierarchy. |
-| `PLS002 [ISP]` | [Interface Segregation](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-разделения-интерфейсов-interface-segregation-principle-isp) | A concrete method always raises `NotImplementedError`, suggesting an unsupported capability. Narrow the interface or declare a genuinely abstract method. |
-| `PLS003 [SRP/DIP]` | [Single Responsibility](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-единой-ответственности-single-responsibility-principle-srp) / [Dependency Inversion](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-инверсии-зависимостей-dependency-inversion-principle-dip) | A class method creates an HTTP, Redis, database or Kafka client: it owns infrastructure setup and depends on a concrete factory. Separate setup from behavior and pass the client in. |
-| `PLS004 [OCP]` | [Open/Closed](https://github.com/community-of-python/pylines/blob/cfaf7a4/solid.md#принцип-открытостизакрытости-openclosed-principle-ocp) | A dispatcher maps ≥3 string values to distinct handlers. A registry allows new handlers without editing its branches. |
-| `PLS005 [SRP]` | Single Responsibility — team rule | A method uses `@staticmethod`. Move independent behavior to a module function. The team's ban applies even to abstract/protocol declarations. |
-| `PLS006 [SRP]` | Single Responsibility — cohesion signal | A concrete method body never uses its instance/class receiver. Move the behavior to a module function or the responsible object. |
-| `PLS007 [LSP]` | Liskov Substitution | An override narrows accepted arguments, widens its result, breaks the call signature or narrows a writable attribute. Preserve the base type contract. |
-| `PLS008 [OCP/LSP]` | Open/Closed / Liskov Substitution | An `isinstance` chain selects local subtypes to call a method missing from their common base. Declare the shared contract and remove the type check. |
-| `PLS009 [DIP]` | Dependency Inversion | A class constructs a local collaborator, stores it on its receiver and calls it from another method. Inject the collaborator or build it in a composition root. |
-| `PLS010 [LSP]` | Liskov Substitution | An override with the same annotated arguments adds a guarded `ValueError` or `TypeError` where the local base returns directly. Preserve the accepted inputs. |
-| `PLS011 [ISP]` | Interface Segregation | A local client requires a `Protocol` but directly calls only some of its methods. Accept a smaller protocol. |
-| `PLS000` | Tool error; no SOLID principle | The check could not finish correctly: fix unreadable input, invalid Python/suppression or an unavailable type checker. |
+The examples show the pattern each rule checks. A finding is a review signal, not proof that a design is wrong.
 
-Each SOLID diagnostic names the principle, explains the observed pattern and suggests a change. `Possible violation` means the reviewer must confirm that the principle applies to this design. For example:
+### PLS001 — Keep inherited behavior [LSP]
 
-```text
-service.py:12:18: PLS003 [SRP/DIP] Possible violation: method owns infrastructure setup; separate setup from behavior and inject the client.
+A child method must not replace a working parent method with `NotImplementedError`.
+
+**Compliant**
+
+```python
+class FlyingBird:
+    def start_flight(self) -> str:
+        return str(self)
+
+
+class PenguinBird:
+    def swim_underwater(self) -> str:
+        return str(self)
 ```
 
-For example, `PLS003` flags construction inside a method:
+**Violation**
+
+```python
+class ParentBird:
+    def start_flight(self) -> str:
+        return str(self)
+
+
+class PenguinBird(ParentBird):
+    def start_flight(self) -> str:
+        raise NotImplementedError
+```
+
+### PLS002 — Remove unsupported capabilities [ISP]
+
+A concrete method must not always reject a capability with `NotImplementedError`. Split the interface or make the method abstract.
+
+**Compliant**
+
+```python
+class PrintableDevice:
+    def print_document(self) -> str:
+        return str(self)
+```
+
+**Violation**
+
+```python
+class PrintableDevice:
+    def print_document(self) -> str:
+        return str(self)
+
+    def scan_document(self) -> str:
+        raise NotImplementedError
+```
+
+### PLS003 — Inject infrastructure clients [SRP/DIP]
+
+A service method must not create its own HTTP, database, Redis, or Kafka client. Pass the client into the service.
+
+**Compliant**
 
 ```python
 import httpx
 
 
 class BalanceReader:
-    def fetch_balance(self) -> httpx.Response:
-        connection = httpx.Client()  # PLS003
-        return connection.get("https://example.com/balance")
-```
-
-Pass the client from the code that owns its lifetime:
-
-```python
-import dataclasses
-
-import httpx
-
-
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
-class BalanceReader:
-    connection: httpx.Client
+    def __init__(self, connection: httpx.Client) -> None:
+        self.connection = connection
 
     def fetch_balance(self) -> httpx.Response:
         return self.connection.get("https://example.com/balance")
 ```
 
-Injected concrete client types are allowed. `Protocol` is not required for every dependency.
-
-`PLS003` covers the shared SRP/DIP setup-and-injection examples in pylines: a user service creates PostgreSQL and Kafka connections itself. Supported factories include `asyncpg.connect`, `asyncpg.create_pool` and `aiokafka` producers/consumers. Dependency injection (DI) is the suggested technique: pass connections into the service to separate setup from user behavior. The `[SRP/DIP]` tag describes this narrow pattern; the checker does not verify every dependency abstraction required by DIP.
-
-`PLS004` follows the command-dispatch example in pylines. Adding a command to a chain edits the dispatcher; a registry lets callers add a handler without rewriting it. A finding belongs to the first `if` or the `match` line. A fixed protocol can reasonably keep explicit branches; explain that choice with a suppression.
-
-## Receiver use and type contracts
-
-`PLS005` is the team's explicit ban on static methods. Python itself permits them; the ban is stricter than the general SRP definition. Both SRP findings point to the `def` line.
-
-`PLS006` checks the body using Python's lexical scopes. A parameter name in the signature, a comment, a string or an annotation does not count. Attribute access, passing the receiver to another function, closure capture and `super()` count. A nested parameter or comprehension variable named `self` does not count as use of the outer receiver. Positional-only arguments, custom receiver names, `classmethod`, properties and async methods are supported.
-
-LSP checks resolve type contracts across files on every normal run. The quickstart above includes them without additional flags or extras.
-
-If `SpecialValue` inherits `GeneralValue`, these overrides illustrate the contract:
-
-| Base method | Override | Result |
-|---|---|---|
-| `handle(value: GeneralValue)` | `handle(value: SpecialValue)` | LSP violation: accepts fewer inputs. |
-| `handle(value: SpecialValue)` | `handle(value: GeneralValue)` | Compatible: accepts all base inputs. |
-| `handle() -> SpecialValue` | `handle() -> GeneralValue` | LSP violation: promises a weaker result. |
-| `handle() -> GeneralValue` | `handle() -> SpecialValue` | Compatible: returns a valid subtype. |
-
-Mypy runs in strict mode with `override` and `mutable-override` enabled. It resolves imported hierarchies, aliases and generic substitutions. Other type errors are reported as `MYPY [code]`, so missing annotations or imports cannot silently make the run green. Missing mypy, invalid output or engine failure produces `PLS000`. Project mypy configuration applies, including plugins and configured ignores; plugins can execute code. Ordinary mypy errors use its `type: ignore[code]` mechanism; `PLS007` also supports the reasoned suppression below.
-
-## Output and exceptions
-
-Diagnostics use `path:line:column: CODE message`, with one-based positions. Exit codes are `0` for no findings, `1` for findings and `2` for input errors, invalid Python or invalid suppressions. Finding no Python files is an input error.
-
-An intentional exception requires an explanation on the diagnostic's line:
+**Violation**
 
 ```python
-connection = httpx.Client()  # pylines-solid: ignore[PLS003] -- adapter owns this client's lifetime
+import httpx
+
+
+class BalanceReader:
+    def fetch_balance(self) -> httpx.Response:
+        connection = httpx.Client()
+        return connection.get("https://example.com/balance")
 ```
 
-Codes can be comma-separated. Unknown codes, missing reasons and unused suppressions fail. Text inside a string cannot suppress a finding.
+### PLS004 — Extend a dispatcher without editing branches [OCP]
 
-Paths are checked recursively, with standard environment, build and cache directories excluded. Symbolic-link directories are not followed.
+A dispatcher with three or more literal routes should use a handler registry. A new handler can then be added without changing the branch chain.
 
-## Scope
+**Compliant**
 
-These checks cover specific patterns across all five SOLID principles, not proof of compliance. SRP's reasons to change and OCP's future extension needs still require domain knowledge and review. No class-size or complexity metric is presented as an SRP verdict.
+```python
+from collections.abc import Callable
 
-`PLS001`–`PLS003` scan classes at any nesting level. Inherited methods are resolved only through same-file single inheritance of module-level classes. Imported hierarchies are not resolved. Abstract methods and classes directly declaring `typing.Protocol` are exempt from refusal checks. A structural interface implementation can trigger `PLS002` without explicitly inheriting a protocol.
 
-Client detection recognizes supported imported names and aliases, including imports inside a method. It checks method bodies, including constructors, but skips nested function bodies and module-level factories. Rebound or ambiguous names are conservatively skipped. There is no type inference or dynamic-call analysis; a clean run does not establish that all dependencies are injected.
+def run_command(command_name: str, available_handlers: dict[str, Callable[[], str]]) -> str:
+    return available_handlers[command_name]()
+```
 
-`PLS004` scans the whole source tree, including functions and nested scopes. It requires the same name or attribute selector, distinct string literals and distinct named handlers. Each branch must contain just a call, a returned call, or a call followed by a bare return; awaited calls work too. Fallback branches are excluded. Guards, compound patterns/conditions, ranges, multi-step branches and dynamically computed selectors are skipped. The threshold of three routes is a review heuristic, not a definition of OCP. Git history is not analyzed.
+**Violation**
 
-`PLS005`/`PLS006` scan classes at any nesting level and recognized decorator aliases. For receiver checks, abstract/Protocol declarations, stubs, special methods, known local overrides and methods with other decorators are skipped. Use `@typing.override` for imported contracts. Methods already reported for refusal or infrastructure construction are not reported again for missing receiver use. This is lexical use, not control-flow proof: dead code or rebinding can still hide independent behavior. Receiver use alone does not prove a single responsibility.
+```python
+from collections.abc import Callable
 
-`PLS008` covers `or` chains of `isinstance` checks on at least two same-file subclasses, followed by a call to a method absent from their direct parent. Other type dispatch, imported classes and dynamically resolved methods are outside this rule.
 
-`PLS009` covers same-file class construction assigned directly to a receiver attribute and used as a collaborator in another method. Value objects with behavior can trigger a finding; review the ownership before changing the design.
+def run_command(
+    command_name: str,
+    list_handler: Callable[[], str],
+    scale_handler: Callable[[], str],
+    delete_handler: Callable[[], str],
+) -> str:
+    if command_name == "list":
+        return list_handler()
+    elif command_name == "scale":
+        return scale_handler()
+    elif command_name == "delete":
+        return delete_handler()
+    raise ValueError(command_name)
+```
 
-`PLS010` covers a direct `if`/`raise` in a local override when the base method has one unconditional return and identical annotated positional arguments. Other runtime preconditions, side effects and exception behavior still need contract tests.
+### PLS005 — Move static methods out of classes [SRP, team rule]
 
-`PLS011` covers same-file, directly declared `Protocol` classes. It reports a client only when every use of its annotated parameter is a direct call of a protocol method. Forwarded parameters and more complex usage are skipped. External uses of a public protocol are unknown, so review each finding.
+Do not use `@staticmethod`. Put independent behavior in a module function. This team rule is stricter than SRP itself.
 
-`PLS007` checks declared type contracts. `Any`, ignored errors, missing type information and dynamic dispatch limit the guarantee. `--no-types` explicitly selects AST-only checks, which never import or execute inspected files and do not run `PLS007`.
+**Compliant**
 
-Development commands and checks live in the [Justfile](Justfile). The [CI workflow](.github/workflows/check.yml) runs them on the supported interpreter versions.
+```python
+def compute_total(values: list[int]) -> int:
+    return sum(values)
+```
+
+**Violation**
+
+```python
+class InvoiceMath:
+    @staticmethod
+    def compute_total(values: list[int]) -> int:
+        return sum(values)
+```
+
+### PLS006 — Use the method receiver [SRP, team rule]
+
+A concrete method must use its instance or class receiver in the body. Move independent work to a module function.
+
+**Compliant**
+
+```python
+class TextFormatter:
+    def __init__(self, prefix_text: str) -> None:
+        self.prefix_text = prefix_text
+
+    def format_text(self, input_text: str) -> str:
+        return self.prefix_text + input_text.strip()
+```
+
+**Violation**
+
+```python
+class TextFormatter:
+    def format_text(self, input_text: str) -> str:
+        return input_text.strip()
+```
+
+### PLS007 — Preserve override types [LSP]
+
+A child method must accept all values accepted by the parent. Its return type must be at least as specific. Mypy checks this rule across files.
+
+**Compliant**
+
+```python
+class ParentService:
+    def process_value(self, input_value: object) -> None:
+        self.last_value = input_value
+
+
+class ChildService(ParentService):
+    def process_value(self, input_value: object) -> None:
+        self.last_value = input_value
+```
+
+**Violation**
+
+```python
+class ParentService:
+    def process_value(self, input_value: object) -> None:
+        self.last_value = input_value
+
+
+class ChildService(ParentService):
+    def process_value(self, input_value: str) -> None:
+        self.last_value = input_value
+```
+
+### PLS008 — Put shared behavior in the base contract [OCP/LSP]
+
+Do not check a list of child types before calling a method they share. Declare the method in the base contract.
+
+**Compliant**
+
+```python
+class ParentShape:
+    def draw_shape(self) -> str:
+        return str(self)
+
+
+def draw_some_shape(shape_object: ParentShape) -> str:
+    return shape_object.draw_shape()
+```
+
+**Violation**
+
+```python
+class ParentShape:
+    pass
+
+
+class CircleShape(ParentShape):
+    def draw_shape(self) -> str:
+        return str(self)
+
+
+class RectangleShape(ParentShape):
+    def draw_shape(self) -> str:
+        return str(self)
+
+
+def draw_some_shape(shape_object: ParentShape) -> str:
+    if isinstance(shape_object, CircleShape) or isinstance(shape_object, RectangleShape):
+        return shape_object.draw_shape()
+    return ""
+```
+
+### PLS009 — Inject a stored collaborator [DIP]
+
+A class should not create a local class, store it, and call it from another method. Pass the collaborator in.
+
+**Compliant**
+
+```python
+class MailNotifier:
+    def send_message(self, message: str) -> str:
+        return f"{self}: {message}"
+
+
+class OrderService:
+    def __init__(self, notifier: MailNotifier) -> None:
+        self.notifier = notifier
+
+    def complete_order(self, order_number: int) -> str:
+        return self.notifier.send_message(str(order_number))
+```
+
+**Violation**
+
+```python
+class MailNotifier:
+    def send_message(self, message: str) -> str:
+        return f"{self}: {message}"
+
+
+class OrderService:
+    def __init__(self) -> None:
+        self.notifier = MailNotifier()
+
+    def complete_order(self, order_number: int) -> str:
+        return self.notifier.send_message(str(order_number))
+```
+
+### PLS010 — Keep the parent precondition [LSP]
+
+A child method must not reject an argument that the parent accepts. This rule checks a direct `if` that raises `ValueError` or `TypeError`.
+
+**Compliant**
+
+```python
+class BalanceReader:
+    def __init__(self, balance: int) -> None:
+        self.balance = balance
+
+    def read_balance(self, account_number: int) -> int:
+        return account_number + self.balance
+
+
+class PositiveReader(BalanceReader):
+    def read_balance(self, account_number: int) -> int:
+        return account_number + self.balance
+```
+
+**Violation**
+
+```python
+class BalanceReader:
+    def __init__(self, balance: int) -> None:
+        self.balance = balance
+
+    def read_balance(self, account_number: int) -> int:
+        return account_number + self.balance
+
+
+class PositiveReader(BalanceReader):
+    def read_balance(self, account_number: int) -> int:
+        if account_number <= 0:
+            raise ValueError("positive number required")
+        return account_number + self.balance
+```
+
+### PLS011 — Require only the interface a client uses [ISP]
+
+A client should accept a `Protocol` with only the methods it calls. This rule checks direct calls on a local protocol parameter.
+
+**Compliant**
+
+```python
+from typing import Protocol
+
+
+class SwitchableDevice(Protocol):
+    def turn_on_device(self) -> None: ...
+
+
+def activate_device(device_object: SwitchableDevice) -> None:
+    device_object.turn_on_device()
+```
+
+**Violation**
+
+```python
+from typing import Protocol
+
+
+class SmartHomeDevice(Protocol):
+    def turn_on_device(self) -> None: ...
+    def play_music_track(self, track_name: str) -> None: ...
+
+
+def activate_device(device_object: SmartHomeDevice) -> None:
+    device_object.turn_on_device()
+```
+
+## Output and limits
+
+The checker reports `path:line:column: CODE message`. `PLS000` means the check failed, for example because Python could not be parsed or mypy could not run. It is not a SOLID rule. Other mypy errors appear as `MYPY [code]`. Mypy runs in strict mode and uses the project's configuration, including plugins and ignores.
+
+To allow a finding, give a reason on its line:
+
+```python
+connection = httpx.Client()  # pylines-solid: ignore[PLS003] -- adapter owns this client
+```
+
+Unknown codes, missing reasons, and unused suppressions are errors. The [pre-commit hook](.pre-commit-hooks.yaml) needs access to the project's typing dependencies. See the [Justfile](Justfile) for development checks.
+
+These rules detect specific patterns. They cannot prove full SOLID compliance. Review the reasons a class may change, the behavior of child classes, and the allowed import graph of each project. `PLS009` can flag a value object; inspect ownership before changing it. `PLS010` checks one guarded rejection pattern. `PLS011` skips clients that pass a protocol parameter to another function. `Any` and ignored mypy errors limit type checks. AST checks do not execute source files, but configured mypy plugins can run code.
