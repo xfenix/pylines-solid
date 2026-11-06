@@ -4,7 +4,7 @@ import types
 import typing
 
 from pylines_solid.diagnostics import Diagnostic
-from pylines_solid.dispatch import check_dispatch
+from pylines_solid.dispatch import check_dispatch, check_type_dispatch
 from pylines_solid.receivers import check_receiver
 
 type MethodDefinition = ast.FunctionDef | ast.AsyncFunctionDef
@@ -31,6 +31,7 @@ CLIENT_FACTORIES: typing.Final = frozenset(
 )
 ABSTRACT_DECORATORS: typing.Final = frozenset({"abc.abstractmethod", "abc.abstractproperty"})
 PROTOCOL_BASES: typing.Final = frozenset({"typing.Protocol", "typing_extensions.Protocol"})
+MINIMUM_CAPABILITIES: typing.Final = 2
 
 
 def collect_scope_nodes(source_nodes: collections.abc.Iterable[ast.AST]) -> collections.abc.Iterator[ast.AST]:
@@ -203,15 +204,13 @@ def check_method(
         global_bindings,
         method_arguments=method_definition.args,
     )
+    parent_declaration: typing.Final = find_inherited_method(class_definition, method_definition.name, module_classes)
     refused_statement: typing.Final = find_refusal(method_definition, method_bindings)
     if (
         refused_statement is not None
         and not check_protocol(class_definition, global_bindings)
         and not check_abstract(method_definition, class_definition, global_bindings)
     ):
-        parent_declaration: typing.Final = find_inherited_method(
-            class_definition, method_definition.name, module_classes
-        )
         overrides_behavior: typing.Final = (
             parent_declaration is not None
             and not check_protocol(parent_declaration[0], global_bindings)
@@ -248,6 +247,185 @@ def check_method(
                 message_text=(
                     "[SRP/DIP] Possible violation: method owns infrastructure setup; "
                     "separate setup from behavior and inject the client."
+                ),
+            )
+    if parent_declaration is not None:
+        guarded_rejection: typing.Final = check_guarded_rejection(
+            method_definition, parent_declaration[1], global_bindings=global_bindings
+        )
+        if guarded_rejection is not None:
+            yield guarded_rejection
+
+
+def check_local_dependency(
+    class_definition: ast.ClassDef, module_classes: collections.abc.Mapping[str, ast.ClassDef]
+) -> collections.abc.Iterator[Diagnostic]:
+    for one_method_definition in class_definition.body:
+        if not isinstance(one_method_definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        positional_arguments = [*one_method_definition.args.posonlyargs, *one_method_definition.args.args]
+        if not positional_arguments:
+            continue
+        receiver_name = positional_arguments[0].arg
+        for one_assignment_node in collect_scope_nodes(one_method_definition.body):
+            if (
+                not isinstance(one_assignment_node, ast.Assign)
+                or len(one_assignment_node.targets) != 1
+                or not isinstance(one_assignment_node.targets[0], ast.Attribute)
+                or not isinstance(one_assignment_node.targets[0].value, ast.Name)
+                or one_assignment_node.targets[0].value.id != receiver_name
+                or not isinstance(one_assignment_node.value, ast.Call)
+                or not isinstance(one_assignment_node.value.func, ast.Name)
+            ):
+                continue
+            dependency_class = module_classes.get(one_assignment_node.value.func.id)
+            if dependency_class is None or dependency_class is class_definition:
+                continue
+            capability_names = {
+                one_member.name
+                for one_member in dependency_class.body
+                if isinstance(one_member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and not one_member.name.startswith("__")
+            }
+            attribute_name = one_assignment_node.targets[0].attr
+            if not capability_names or not any(
+                isinstance(one_call_node, ast.Call)
+                and isinstance(one_call_node.func, ast.Attribute)
+                and one_call_node.func.attr in capability_names
+                and isinstance(one_call_node.func.value, ast.Attribute)
+                and isinstance(one_call_node.func.value.value, ast.Name)
+                and one_call_node.func.value.value.id == receiver_name
+                and one_call_node.func.value.attr == attribute_name
+                for one_other_method in class_definition.body
+                if isinstance(one_other_method, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and one_other_method is not one_method_definition
+                for one_statement_node in one_other_method.body
+                for one_call_node in collect_scope_nodes((one_statement_node,))
+            ):
+                continue
+            yield Diagnostic(
+                line_number=one_assignment_node.value.lineno,
+                column_number=one_assignment_node.value.col_offset + 1,
+                rule_code="PLS009",
+                message_text=(
+                    "[DIP] Possible violation: class creates and owns a local collaborator; "
+                    "inject the dependency or define the composition root."
+                ),
+            )
+
+
+def check_guarded_rejection(
+    method_definition: MethodDefinition,
+    parent_method: MethodDefinition,
+    *,
+    global_bindings: ScopeBindings,
+) -> Diagnostic | None:
+    child_arguments: typing.Final = [*method_definition.args.posonlyargs, *method_definition.args.args][1:]
+    parent_arguments: typing.Final = [*parent_method.args.posonlyargs, *parent_method.args.args][1:]
+    if not child_arguments or len(child_arguments) != len(parent_arguments):
+        return None
+    if any(
+        one_child_argument.arg != one_parent_argument.arg
+        or one_child_argument.annotation is None
+        or one_parent_argument.annotation is None
+        or ast.dump(one_child_argument.annotation) != ast.dump(one_parent_argument.annotation)
+        for one_child_argument, one_parent_argument in zip(child_arguments, parent_arguments, strict=True)
+    ):
+        return None
+    parent_statements: typing.Final = [
+        one_statement
+        for one_statement in parent_method.body
+        if not isinstance(one_statement, ast.Expr) or not isinstance(one_statement.value, ast.Constant)
+    ]
+    if len(parent_statements) != 1 or not isinstance(parent_statements[0], ast.Return):
+        return None
+    child_bindings: typing.Final = collect_bindings(
+        method_definition.body, global_bindings, method_arguments=method_definition.args
+    )
+    for one_branch_node in method_definition.body:
+        if not isinstance(one_branch_node, ast.If) or one_branch_node.orelse or len(one_branch_node.body) != 1:
+            continue
+        if not isinstance(one_branch_node.body[0], ast.Raise):
+            continue
+        raise_statement = one_branch_node.body[0]
+        exception_node = raise_statement.exc.func if isinstance(raise_statement.exc, ast.Call) else raise_statement.exc
+        if exception_node is None or resolve_builtin(exception_node, child_bindings) not in {
+            "builtins.ValueError",
+            "builtins.TypeError",
+        }:
+            continue
+        argument_names = {one_argument.arg for one_argument in child_arguments}
+        if not any(
+            isinstance(one_name_node, ast.Name) and one_name_node.id in argument_names
+            for one_name_node in ast.walk(one_branch_node.test)
+        ):
+            continue
+        return Diagnostic(
+            line_number=raise_statement.lineno,
+            column_number=raise_statement.col_offset + 1,
+            rule_code="PLS010",
+            message_text=(
+                "[LSP] Possible violation: override rejects an argument accepted by the local base; "
+                "preserve the base precondition."
+            ),
+        )
+    return None
+
+
+def check_interface_usage(
+    syntax_tree: ast.Module,
+    module_classes: collections.abc.Mapping[str, ast.ClassDef],
+    *,
+    global_bindings: ScopeBindings,
+) -> collections.abc.Iterator[Diagnostic]:
+    for one_function_node in ast.walk(syntax_tree):
+        if not isinstance(one_function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body_nodes = tuple(collect_scope_nodes(one_function_node.body))
+        for one_argument in (*one_function_node.args.posonlyargs, *one_function_node.args.args):
+            if not isinstance(one_argument.annotation, ast.Name):
+                continue
+            protocol_class = module_classes.get(one_argument.annotation.id)
+            if protocol_class is None or not check_protocol(protocol_class, global_bindings):
+                continue
+            capability_names = {
+                one_member.name
+                for one_member in protocol_class.body
+                if isinstance(one_member, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and not one_member.name.startswith("_")
+            }
+            if len(capability_names) < MINIMUM_CAPABILITIES:
+                continue
+            references = [
+                one_name_node
+                for one_name_node in body_nodes
+                if isinstance(one_name_node, ast.Name) and one_name_node.id == one_argument.arg
+            ]
+            capability_calls = [
+                one_call_node
+                for one_call_node in body_nodes
+                if isinstance(one_call_node, ast.Call)
+                and isinstance(one_call_node.func, ast.Attribute)
+                and isinstance(one_call_node.func.value, ast.Name)
+                and one_call_node.func.value.id == one_argument.arg
+                and one_call_node.func.attr in capability_names
+            ]
+            if not capability_calls or len(references) != len(capability_calls):
+                continue
+            used_capabilities = {
+                one_call_node.func.attr
+                for one_call_node in capability_calls
+                if isinstance(one_call_node.func, ast.Attribute)
+            }
+            if used_capabilities == capability_names:
+                continue
+            yield Diagnostic(
+                line_number=one_argument.lineno,
+                column_number=one_argument.col_offset + 1,
+                rule_code="PLS011",
+                message_text=(
+                    "[ISP] Possible violation: client requires protocol capabilities it never calls; "
+                    "accept a smaller Protocol for this client."
                 ),
             )
 
@@ -320,29 +498,30 @@ def check_source(source_text: str, source_name: str) -> list[Diagnostic]:
         for one_statement_node in syntax_tree.body
         if isinstance(one_statement_node, ast.ClassDef)
     }
-    diagnostics_found: typing.Final = list(check_dispatch(syntax_tree))
-    diagnostics_found.extend(
-        one_diagnostic
-        for one_class_definition in module_classes.values()
-        for one_method_definition in one_class_definition.body
-        if isinstance(one_method_definition, (ast.FunctionDef, ast.AsyncFunctionDef))
-        for one_diagnostic in check_method(
-            class_definition=one_class_definition,
-            method_definition=one_method_definition,
-            module_classes=module_classes,
-            global_bindings=global_bindings,
-        )
+    all_classes: typing.Final = (
+        one_source_node for one_source_node in ast.walk(syntax_tree) if isinstance(one_source_node, ast.ClassDef)
     )
-    diagnostics_found.extend(
-        one_diagnostic
-        for one_class_definition in module_classes.values()
-        for one_method_definition in one_class_definition.body
-        if isinstance(one_method_definition, (ast.FunctionDef, ast.AsyncFunctionDef))
-        for one_diagnostic in check_method_responsibility(
-            class_definition=one_class_definition,
-            method_definition=one_method_definition,
-            module_classes=module_classes,
-            global_bindings=global_bindings,
-        )
-    )
+    diagnostics_found: typing.Final = [*check_dispatch(syntax_tree), *check_type_dispatch(syntax_tree, module_classes)]
+    diagnostics_found.extend(check_interface_usage(syntax_tree, module_classes, global_bindings=global_bindings))
+    for one_class_definition in all_classes:
+        for one_method_definition in one_class_definition.body:
+            if not isinstance(one_method_definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            diagnostics_found.extend(
+                check_method(
+                    class_definition=one_class_definition,
+                    method_definition=one_method_definition,
+                    module_classes=module_classes,
+                    global_bindings=global_bindings,
+                )
+            )
+            diagnostics_found.extend(
+                check_method_responsibility(
+                    class_definition=one_class_definition,
+                    method_definition=one_method_definition,
+                    module_classes=module_classes,
+                    global_bindings=global_bindings,
+                )
+            )
+        diagnostics_found.extend(check_local_dependency(one_class_definition, module_classes))
     return diagnostics_found

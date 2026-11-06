@@ -9,6 +9,8 @@ if typing.TYPE_CHECKING:
 type DispatchRoute = tuple[str, str, str]
 
 MINIMUM_ROUTES: typing.Final = 3
+MINIMUM_SUBTYPES: typing.Final = 2
+ISINSTANCE_ARGUMENTS: typing.Final = 2
 
 
 def read_reference(expression: ast.AST) -> str | None:
@@ -122,5 +124,93 @@ def check_dispatch(syntax_tree: ast.Module) -> collections.abc.Iterator[Diagnost
                 message_text=(
                     f"[OCP] Possible violation: dispatcher hardcodes {len(dispatch_routes)} handlers; "
                     "use a registry to add handlers without editing branches."
+                ),
+            )
+
+
+def check_type_dispatch(
+    syntax_tree: ast.Module, module_classes: dict[str, ast.ClassDef]
+) -> typing.Iterator[Diagnostic]:
+    """Find local subtype checks that bypass a missing base capability."""
+    for one_branch_node in ast.walk(syntax_tree):
+        if not isinstance(one_branch_node, ast.If) or not isinstance(one_branch_node.test, ast.BoolOp):
+            continue
+        if not isinstance(one_branch_node.test.op, ast.Or) or len(one_branch_node.test.values) < MINIMUM_SUBTYPES:
+            continue
+        type_checks = one_branch_node.test.values
+        if any(
+            not isinstance(one_check_node, ast.Call)
+            or not isinstance(one_check_node.func, ast.Name)
+            or one_check_node.func.id != "isinstance"
+            or len(one_check_node.args) != ISINSTANCE_ARGUMENTS
+            or one_check_node.keywords
+            or not isinstance(one_check_node.args[0], ast.Name)
+            or not isinstance(one_check_node.args[1], ast.Name)
+            for one_check_node in type_checks
+        ):
+            continue
+        selector_names = {
+            one_argument_node.id
+            for one_check_node in type_checks
+            if isinstance(one_check_node, ast.Call)
+            for one_argument_node in one_check_node.args[:1]
+            if isinstance(one_argument_node, ast.Name)
+        }
+        subtype_names = {
+            one_argument_node.id
+            for one_check_node in type_checks
+            if isinstance(one_check_node, ast.Call)
+            for one_argument_node in one_check_node.args[1:2]
+            if isinstance(one_argument_node, ast.Name)
+        }
+        if len(selector_names) != 1 or len(subtype_names) < MINIMUM_SUBTYPES:
+            continue
+        subtypes = [module_classes.get(one_subtype_name) for one_subtype_name in subtype_names]
+        if any(
+            one_subtype is None or len(one_subtype.bases) != 1 or not isinstance(one_subtype.bases[0], ast.Name)
+            for one_subtype in subtypes
+        ):
+            continue
+        base_names = {
+            one_subtype.bases[0].id
+            for one_subtype in subtypes
+            if one_subtype is not None and isinstance(one_subtype.bases[0], ast.Name)
+        }
+        if len(base_names) != 1:
+            continue
+        base_class = module_classes.get(next(iter(base_names)))
+        if base_class is None:
+            continue
+        base_methods = {
+            one_method.name
+            for one_method in base_class.body
+            if isinstance(one_method, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        subtype_methods = [
+            {
+                one_method.name
+                for one_method in one_subtype.body
+                if isinstance(one_method, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+            for one_subtype in subtypes
+            if one_subtype is not None
+        ]
+        shared_methods = set.intersection(*subtype_methods) - base_methods
+        if any(
+            isinstance(one_call_node, ast.Call)
+            and isinstance(one_call_node.func, ast.Attribute)
+            and isinstance(one_call_node.func.value, ast.Name)
+            and one_call_node.func.value.id in selector_names
+            and one_call_node.func.attr in shared_methods
+            for one_statement_node in one_branch_node.body
+            for one_call_node in ast.walk(one_statement_node)
+        ):
+            yield Diagnostic(
+                line_number=one_branch_node.lineno,
+                column_number=one_branch_node.col_offset + 1,
+                rule_code="PLS008",
+                message_text=(
+                    "[OCP/LSP] Possible violation: subtype checks hide a capability missing from the base; "
+                    "declare the shared contract and remove type-based dispatch."
                 ),
             )

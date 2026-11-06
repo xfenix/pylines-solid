@@ -21,6 +21,10 @@ Run in the project environment so mypy can see its dependencies and stubs. The p
 | `PLS005 [SRP]` | Single Responsibility — team rule | A method uses `@staticmethod`. Move independent behavior to a module function. The team's ban applies even to abstract/protocol declarations. |
 | `PLS006 [SRP]` | Single Responsibility — cohesion signal | A concrete method body never uses its instance/class receiver. Move the behavior to a module function or the responsible object. |
 | `PLS007 [LSP]` | Liskov Substitution | An override narrows accepted arguments, widens its result, breaks the call signature or narrows a writable attribute. Preserve the base type contract. |
+| `PLS008 [OCP/LSP]` | Open/Closed / Liskov Substitution | An `isinstance` chain selects local subtypes to call a method missing from their common base. Declare the shared contract and remove the type check. |
+| `PLS009 [DIP]` | Dependency Inversion | A class constructs a local collaborator, stores it on its receiver and calls it from another method. Inject the collaborator or build it in a composition root. |
+| `PLS010 [LSP]` | Liskov Substitution | An override with the same annotated arguments adds a guarded `ValueError` or `TypeError` where the local base returns directly. Preserve the accepted inputs. |
+| `PLS011 [ISP]` | Interface Segregation | A local client requires a `Protocol` but directly calls only some of its methods. Accept a smaller protocol. |
 | `PLS000` | Tool error; no SOLID principle | The check could not finish correctly: fix unreadable input, invalid Python/suppression or an unavailable type checker. |
 
 Each SOLID diagnostic names the principle, explains the observed pattern and suggests a change. `Possible violation` means the reviewer must confirm that the principle applies to this design. For example:
@@ -100,14 +104,22 @@ Paths are checked recursively, with standard environment, build and cache direct
 
 These checks cover specific patterns across all five SOLID principles, not proof of compliance. SRP's reasons to change and OCP's future extension needs still require domain knowledge and review. No class-size or complexity metric is presented as an SRP verdict.
 
-`PLS001`–`PLS003` cover module-level classes. Inherited methods are resolved only through same-file single inheritance. Imported hierarchies and nested classes are not resolved. Abstract methods and classes directly declaring `typing.Protocol` are exempt from refusal checks. A structural interface implementation can trigger `PLS002` without explicitly inheriting a protocol.
+`PLS001`–`PLS003` scan classes at any nesting level. Inherited methods are resolved only through same-file single inheritance of module-level classes. Imported hierarchies are not resolved. Abstract methods and classes directly declaring `typing.Protocol` are exempt from refusal checks. A structural interface implementation can trigger `PLS002` without explicitly inheriting a protocol.
 
 Client detection recognizes supported imported names and aliases, including imports inside a method. It checks method bodies, including constructors, but skips nested function bodies and module-level factories. Rebound or ambiguous names are conservatively skipped. There is no type inference or dynamic-call analysis; a clean run does not establish that all dependencies are injected.
 
 `PLS004` scans the whole source tree, including functions and nested scopes. It requires the same name or attribute selector, distinct string literals and distinct named handlers. Each branch must contain just a call, a returned call, or a call followed by a bare return; awaited calls work too. Fallback branches are excluded. Guards, compound patterns/conditions, ranges, multi-step branches and dynamically computed selectors are skipped. The threshold of three routes is a review heuristic, not a definition of OCP. Git history is not analyzed.
 
-`PLS005`/`PLS006` cover module-level classes and recognized decorator aliases. For receiver checks, abstract/Protocol declarations, stubs, special methods, known local overrides and methods with other decorators are skipped. Use `@typing.override` for imported contracts. Methods already reported for refusal or infrastructure construction are not reported again for missing receiver use. This is lexical use, not control-flow proof: dead code or rebinding can still hide independent behavior. Receiver use alone does not prove a single responsibility.
+`PLS005`/`PLS006` scan classes at any nesting level and recognized decorator aliases. For receiver checks, abstract/Protocol declarations, stubs, special methods, known local overrides and methods with other decorators are skipped. Use `@typing.override` for imported contracts. Methods already reported for refusal or infrastructure construction are not reported again for missing receiver use. This is lexical use, not control-flow proof: dead code or rebinding can still hide independent behavior. Receiver use alone does not prove a single responsibility.
 
-`PLS007` checks declared type contracts, not runtime preconditions, side effects or exception behavior. `Any`, ignored errors, missing type information and dynamic dispatch limit the guarantee. `--no-types` explicitly selects AST-only checks, which never import or execute inspected files and do not run `PLS007`.
+`PLS008` covers `or` chains of `isinstance` checks on at least two same-file subclasses, followed by a call to a method absent from their direct parent. Other type dispatch, imported classes and dynamically resolved methods are outside this rule.
+
+`PLS009` covers same-file class construction assigned directly to a receiver attribute and used as a collaborator in another method. Value objects with behavior can trigger a finding; review the ownership before changing the design.
+
+`PLS010` covers a direct `if`/`raise` in a local override when the base method has one unconditional return and identical annotated positional arguments. Other runtime preconditions, side effects and exception behavior still need contract tests.
+
+`PLS011` covers same-file, directly declared `Protocol` classes. It reports a client only when every use of its annotated parameter is a direct call of a protocol method. Forwarded parameters and more complex usage are skipped. External uses of a public protocol are unknown, so review each finding.
+
+`PLS007` checks declared type contracts. `Any`, ignored errors, missing type information and dynamic dispatch limit the guarantee. `--no-types` explicitly selects AST-only checks, which never import or execute inspected files and do not run `PLS007`.
 
 Development commands and checks live in the [Justfile](Justfile). The [CI workflow](.github/workflows/check.yml) runs them on the supported interpreter versions.
